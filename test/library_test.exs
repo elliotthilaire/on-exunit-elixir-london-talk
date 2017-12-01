@@ -1,45 +1,55 @@
 defmodule LibraryTest do
   use ExUnit.Case
 
-  describe "loan/2 when user has no loans" do
-    setup [:register_user]
+  import Fixtures
 
+  describe "create_loan/2" do
     setup do
-      [book: %Book{title: "Wizard and Glass"}]
+      [user: fixture(:user), book: fixture(:book)]
     end
 
     test "returns {:ok, %Loan{}}", %{user: user, book: book} do
-      assert {:ok, %Loan{}} = Library.loan(user, book)
+      assert {:ok, %Loan{}} = Library.create_loan(user, book)
     end
 
     test "sets due date 14 days after today", %{user: user, book: book} do
-      {:ok, %Loan{due: due_date}} = Library.loan(user, book)
+      {:ok, %Loan{due: due_date}} = Library.create_loan(user, book)
 
-      assert ^due_date = Date.add(Date.utc_today(), 14)
+      assert due_date == Date.add(Date.utc_today(), 14)
+    end
+
+    test "sends sms with book title and due date", %{user: user, book: book} do
+      Library.create_loan(user, book)
+
+      assert_receive({:sms_sent, sms_content})
+      assert sms_content =~ book.title
+      assert sms_content =~ "#{Date.add(Date.utc_today(), 14)}"
     end
   end
 
-  describe "loan/2 when user has loan" do
-    setup [:register_user, :with_loan]
+  describe "create_loan/2 when user has overdue loan" do
+    setup do
+      user = fixture(:user)
+      loan = fixture(:loan, %{user: user, due: Date.add(Date.utc_today(), -2)})
+
+      [user: %{user | loans: [loan]}]
+    end
 
     setup do
-      [book: %Book{title: "Wizard and Glass"}]
+      [book: fixture(:book)]
     end
 
     test "returns {:error, :too_many_loans}", %{user: user, book: book} do
-      assert {:error, :too_many_loans} = Library.loan(user, book)
+      assert {:error, :too_many_loans} = Library.create_loan(user, book)
     end
   end
 
-  defp register_user(_context) do
-    user = %User{name: "Jake Chambers", loans: []}
-
-    [user: user]
+  describe "end_loan/1 when not overdue" do
+    test "returns :ok"
   end
 
-  defp with_loan(%{user: user}) do
-    user = %{user | loans: [%Loan{}]}
-
-    [user: user]
+  describe "end_loan/1 when overdue" do
+    test "returns :ok"
+    test "sends sms with fine amount"
   end
 end
